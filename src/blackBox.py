@@ -239,6 +239,8 @@ class MLP:
         self.lossFunc = lossFunc
 
     def forward(self, x):
+        if len(x.shape) == 1:
+            x = x.reshape(1, -1)
         for i in range(len(self.W)):
 
             x = add(matmul(x, self.W[i]), self.b[i])

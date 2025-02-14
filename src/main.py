@@ -17,6 +17,11 @@ def D2(epoch: int, lr: float):
         loss_val.append(l_val)
         print(f"Epoch: {i} Train Loss: {l_train} Test Loss: {l_val}")
 
+    loss_train = np.array(loss_train)
+    loss_train = loss_train.reshape(-1)
+    loss_val = np.array(loss_val)
+    loss_val = loss_val.reshape(-1)
+
     logs = {
         'train_loss': loss_train,
         'test_loss': loss_val,
@@ -24,6 +29,8 @@ def D2(epoch: int, lr: float):
     }
 
     plot_loss(logs)
+    plt.show()
     plot_decision_boundary(x_test, label_test, model.forward)
+    plt.show()
 
-D2(100, 0.01)
+D2(300, 0.05)
