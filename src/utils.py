@@ -71,9 +71,11 @@ def bwd(func):
 
 
 def unbroadcast(grad, shape):
-    return grad.sum(axis=tuple(range(len(shape), len(grad.shape)))) \
-        .sum(axis=tuple(i for i, s in enumerate(shape) if s == 1), keepdims=True)
-
+    first_axes = tuple(range(len(shape), len(grad.shape)))
+    grad = grad.sum(axis=first_axes)
+    # Only sum over axes in `shape` that exist in grad.
+    second_axes = tuple(i for i, s in enumerate(shape) if s == 1 and i < grad.ndim)
+    return grad.sum(axis=second_axes, keepdims=True)
 
 """
 Backpropagation function that is used to propagate the gradients back through the operations.
@@ -86,7 +88,6 @@ def backprop():
         assert func is not None
 
         grads = func(*args, out)
-
         if not isinstance(grads, tuple):
             grads = (grads,)
 
@@ -151,7 +152,7 @@ def div_bwd(a, b, out):
 def pow(a, b):
     return a ** b
 
-
+# Useless caused me a lot of issues
 @bwd
 def pow_bwd(a, b, out):
     da = np.where(a > 0, b * a ** (b - 1) * out.gradient, 0)
@@ -215,6 +216,8 @@ def sigmoid(a):
 def tanh(a):
     return div(sub(exp(a), exp(neg(a))), add(exp(a), exp(neg(a))))
 
+def linear(a):
+    return a
 
 """
 Loss functions.
@@ -229,14 +232,79 @@ def L2(x, y):
 def BCE(x, y):
     return neg(add(mul(y, log(x)), mul(sub(1, y), log(sub(1, x)))))
 
+"""
+Type of initialization 
+"""
+
+def xavier(shape, uniform=True):
+    if uniform:
+        limit = np.sqrt(6.0 / (shape[0] + shape[1]))
+        return np.random.uniform(-limit, limit, size=shape)
+    else:
+        return np.random.randn(*shape) * np.sqrt(2.0 / (shape[0] + shape[1]))
+
+def he(shape, uniform=True):
+    if uniform:
+        limit = np.sqrt(6.0 / shape[0])
+        return np.random.uniform(-limit, limit, size=shape)
+    else:
+        return np.random.randn(*shape) * np.sqrt(2.0 / shape[0])
+
+def rand(shape, uniform=True):
+    if uniform:
+        return np.random.uniform(-1, 1, size=shape)
+    else:
+        return np.random.randn(*shape)
+
+"""
+Optimizers
+"""
+
+def GD(lr, params, scale, old_grads):
+    for w, b in params:
+        w -= lr * w.gradient/scale
+        b -= lr * b.gradient/scale
+
+def momentumGD(lr, params, scale, old_grads, beta=0.9):
+
+    for i, (w, b) in enumerate(params):
+
+        vw_curr = beta * old_grads[i][0] + (1-beta)*w.gradient/scale
+        vb_curr = beta * old_grads[i][1] + (1-beta)*b.gradient/scale
+        w -= lr * vw_curr
+        b -= lr * vb_curr
+        old_grads[i][0] = vw_curr
+        old_grads[i][1] = vb_curr
+
+def ADAM(lr, params, scale, old_grads, beta1=0.9, beta2=0.999, eps=1e-8):
+
+    for i, (w, b) in enumerate(params):
+
+        mw_curr = beta1 * old_grads[i][0] + (1 - beta1) * w.gradient / scale
+        mb_curr = beta1 * old_grads[i][1] + (1 - beta1) * b.gradient / scale
+        vw_curr = beta2 * old_grads[i][2] + (1 - beta2) * (w.gradient / scale) ** 2
+        vb_curr = beta2 * old_grads[i][3] + (1 - beta2) * (b.gradient / scale) ** 2
+
+        mw_hat = mw_curr / (1 - beta1 ** (i + 1))
+        vw_hat = vw_curr / (1 - beta2 ** (i + 1))
+        mb_hat = mb_curr / (1 - beta1 ** (i + 1))
+        vb_hat = vb_curr / (1 - beta2 ** (i + 1))
+
+        w -= lr * mw_hat / (np.sqrt(vw_hat) + eps)
+        b -= lr * mb_hat / (np.sqrt(vb_hat) + eps)
+        old_grads[i][0] = mw_curr
+        old_grads[i][1] = mb_curr
+        old_grads[i][2] = vw_curr
+        old_grads[i][3] = vb_curr
 
 class MLP:
-    def __init__(self, num_layers, layers_list, activation, lossFunc):
+    def __init__(self, num_layers, layers_list, activation, lossFunc, init, optimizer=GD):
         assert num_layers == len(layers_list) - 1
-        self.W = [array(np.random.randn(layers_list[i][0], layers_list[i][1])) for i in range(num_layers+1)]
-        self.b = [array(np.random.randn(1, layers_list[i][1])) for i in range(num_layers+1)]
-        self.activation = activation
+        self.W = [array(init((layers_list[i][0], layers_list[i][1]))) for i in range(num_layers+1)]
+        self.b = [array(np.zeros((1, layers_list[i][1]))) for i in range(num_layers+1)]
+        self.activation = [activation[i] for i in range(num_layers+1)]
         self.lossFunc = lossFunc
+        self.optimizer = optimizer
 
     def forward(self, x):
         if len(x.shape) == 1:
@@ -244,10 +312,7 @@ class MLP:
         for i in range(len(self.W)):
 
             x = add(matmul(x, self.W[i]), self.b[i])
-            if i < len(self.W) - 1:
-                x = self.activation(x)
-            else:
-                x = sigmoid(x)
+            x = self.activation[i](x)
 
         return x
 
@@ -262,13 +327,18 @@ class MLP:
             out = self.forward(x)
             loss = self.lossFunc(out, y)
             tot_loss += loss
-            loss.gradient = 1.0
+            # Put the gradient of the loss in an array otherwise the backpropagation will not work
+            loss.gradient = np.array([1.0])
             backprop()
 
-        # Update weights with GD
-        for w, b in zip(self.W, self.b):
-            w -= lr * (w.gradient / len(train_data))
-            b -= lr * (b.gradient / len(train_data))
+
+
+
+        # Store old gradients even if we are not using them for practicality
+        old_grads = [[w.gradient/len(train_data), b.gradient/len(train_data),
+                     (w.gradient/len(train_data))**2, (b.gradient/len(train_data))**2] for w, b in zip(self.W, self.b)]
+        # Update weights with optimizer
+        self.optimizer(lr, zip(self.W, self.b), len(train_data), old_grads)
 
         # Reset gradients
         for w, b in zip(self.W, self.b):
