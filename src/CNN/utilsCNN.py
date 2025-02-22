@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import scipy as sp
 
 class MyConv2D(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, bias=True):
@@ -33,10 +34,12 @@ class MyConv2D(nn.Module):
         ## Create the torch.nn.Parameter for the weights and bias (if bias=True)
         ## Be careful about the size
         # ----- TODO -----
-        self.W = np.
-        self.b = None
 
-        raise NotImplementedError
+        # Parameters otherwise they don't get optimized
+        self.W = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size))
+        # it gets broadcasted to (out_channels, in_channels, kernel_size, kernel_size)
+        self.b = nn.Parameter(torch.randn(out_channels))
+
             
     
     def __call__(self, x):
@@ -56,9 +59,27 @@ class MyConv2D(nn.Module):
 
         # call MyFConv2D here
         # ----- TODO -----
-        
-        raise NotImplementedError
 
+        out_height = (x.shape[2] - self.kernel_size + 2 * self.padding) // self.stride + 1
+        out_width = (x.shape[3] - self.kernel_size + 2 * self.padding) // self.stride + 1
+
+        if self.padding > 0:
+            # mode = 'constant' with zero padding
+            x = F.pad(x, (self.padding, self.padding, self.padding, self.padding), mode='constant', value=0)
+
+        # For loops way too slow
+
+        # (Batch, out_channels*kernel_size*kernel_size, kernel_positions)
+        flatX = F.unfold(x, self.kernel_size, stride=self.stride)
+        # (out_channels, in_channels*kernel_size*kernel_size)
+        flatW = self.W.view(self.out_channels, -1)
+        # At the end of the day these convolutions are just matrix multiplications
+        flatOut = torch.matmul(flatW, flatX)
+        # Reshape to (Batch, out_channels, out_height, out_width)
+        output = flatOut.view(x.shape[0], self.out_channels, out_height, out_width) + self.b.view(1, self.out_channels, 1, 1)
+
+
+        return output
     
 class MyMaxPool2D(nn.Module):
 
@@ -77,9 +98,9 @@ class MyMaxPool2D(nn.Module):
         ## Hint: what should be the default stride_size if it is not given? 
         ## Think about the relationship with kernel_size
         # ----- TODO -----
-        self.stride = None
+        self.stride = stride if stride is not None else kernel_size
 
-        raise NotImplementedError
+
 
 
     def __call__(self, x):
@@ -107,19 +128,41 @@ class MyMaxPool2D(nn.Module):
         
         ## Derive the output size
         # ----- TODO -----
-        self.output_height   = None
-        self.output_width    = None
-        self.output_channels = None
+        self.output_height   = (self.input_height - self.kernel_size) // self.stride + 1
+        self.output_width    = (self.input_width - self.kernel_size) // self.stride + 1
+        self.output_channels = self.channel
         self.x_pool_out      = None
+
+        # first unfold create vertical window (batch, channel, windowV, kernel_size, output_width)
+        # second unfold create horizontal window for each vertical window
+        # (batch, channel, windowV, windowH, kernel_size, kernel_size)
+        # We need to find the max value in each window
+        flatX = x.unfold(2, self.kernel_size, self.stride).unfold(3, self.kernel_size, self.stride)
+        # collapse kernel_size
+        flatX = flatX.reshape(self.batch_size, self.channel, flatX.shape[2], flatX.shape[3], -1)
+        # find max value in each window
+        self.x_pool_out = flatX.max(-1)[0]
+
 
         ## Maxpooling process
         ## Feel free to use for loop
         # ----- TODO -----
 
-        raise NotImplementedError
+        return self.x_pool_out
 
 
 if __name__ == "__main__":
 
     ## Test your implementation!
-    pass
+    img = Image.open('2007_001239.jpg')
+    h, w = img.size
+    img = np.array(img)
+    img = torch.tensor(img).permute(2, 0, 1).unsqueeze(0).float()
+    l1 = MyConv2D(3, 1, 3, 1, 1)
+    res1 = l1(img)
+    l2 = MyMaxPool2D(1)
+    res2 = l2(img)
+    print(res2.shape)
+    Image.fromarray(res1.squeeze(0).squeeze(0).byte().numpy()).show()
+    Image.fromarray(res2.squeeze(0).permute(1, 2, 0).byte().numpy()).show()
+
