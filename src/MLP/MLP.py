@@ -1,5 +1,5 @@
 import numpy as np
-from utils import *
+from utilsMLP import *
 class MLP:
     def __init__(self, num_layers, layers_list, activation, lossFunc, init, optimizer=GD):
         assert num_layers == len(layers_list) - 1

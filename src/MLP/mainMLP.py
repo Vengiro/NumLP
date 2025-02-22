@@ -1,7 +1,7 @@
-from utils import *
-from src.numpyNN import *
+from utilsMLP import *
+from src.MLP.numpyNN import *
 import numpy as np
-from src.MLP import MLP
+from src.MLP.MLP import MLP
 def DataTrain(epoch: int, lr: float, model: MLP, data_name: str):
     x_train, label_train, x_test, label_test = sample_data(data_name=data_name)
 
