@@ -35,10 +35,11 @@ class MyConv2D(nn.Module):
         ## Be careful about the size
         # ----- TODO -----
 
+        # He initialization for the weights
         # Parameters otherwise they don't get optimized
-        self.W = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size))
+        self.W = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size)*np.sqrt(2/(in_channels*kernel_size*kernel_size)))
         # it gets broadcasted to (out_channels, in_channels, kernel_size, kernel_size)
-        self.b = nn.Parameter(torch.randn(out_channels))
+        self.b = nn.Parameter(torch.zeros(out_channels))
 
             
     
@@ -150,19 +151,45 @@ class MyMaxPool2D(nn.Module):
 
         return self.x_pool_out
 
+"""
+    Test using the given image. You need it in the same directory as this script.
+    Test1: Take the image and apply the convolution layer with the given kernel size, stride, and padding.
+    we can
+"""
+def main():
+    test1(1, 3, 1, 1)
+    test2(2, 2)
 
-if __name__ == "__main__":
-
-    ## Test your implementation!
+def test1(out_channels, kernel_size, stride, padding):
     img = Image.open('2007_001239.jpg')
     h, w = img.size
     img = np.array(img)
     img = torch.tensor(img).permute(2, 0, 1).unsqueeze(0).float()
-    l1 = MyConv2D(3, 1, 3, 1, 1)
+    l1 = MyConv2D(3, out_channels, kernel_size, stride, padding)
     res1 = l1(img)
-    l2 = MyMaxPool2D(1)
-    res2 = l2(img)
-    print(res2.shape)
+    new_h = (h + 2*padding - kernel_size) // stride + 1
+    new_w = (w + 2*padding - kernel_size) // stride + 1
+    assert res1.shape == (1, out_channels, new_h, new_w)
+    print('Test 1 passed.')
     Image.fromarray(res1.squeeze(0).squeeze(0).byte().numpy()).show()
+
+def test2(kernel_size, stride=None):
+    img = Image.open('2007_001239.jpg')
+    h, w = img.size
+    img = np.array(img)
+    img = torch.tensor(img).permute(2, 0, 1).unsqueeze(0).float()
+    l2 = MyMaxPool2D(kernel_size, stride)
+    res2 = l2(img)
+    new_h = (h - kernel_size) // stride + 1
+    new_w = (w - kernel_size) // stride + 1
+    assert res2.shape == (1, 3, new_h, new_w)
+    print('Test 2 passed.')
     Image.fromarray(res2.squeeze(0).permute(1, 2, 0).byte().numpy()).show()
+
+
+if __name__ == "__main__":
+
+    ## Test your implementation!
+    main()
+
 
