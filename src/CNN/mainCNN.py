@@ -65,6 +65,7 @@ def train(train_loader, test_loader, epoch, model, loss, optimizer):
             loss_tr += l.item()
             l.backward()
             optimizer.step()
+            print(f"Epoch: {i} Loss training: {l.item()}")
         loss_train_list.append(loss_tr/len(train_loader))
         print(f"Epoch: {i} Loss training: {loss_tr/len(train_loader)}")
         loss_tr = 0
@@ -79,6 +80,8 @@ def train(train_loader, test_loader, epoch, model, loss, optimizer):
             predicted = torch.argmax(predicted, dim=1)
             total += y.size(0)
             correct += (predicted == y).sum().item()
+            print(f"Epoch: {i} Loss test: {l_pred/len(test_loader)}")
+            print(f"Epoch: {i} Accuracy: {correct/total}")
         loss_test_list.append(l_pred/len(test_loader))
         print(f"Epoch: {i} Loss test: {l_pred/len(test_loader)}")
         print(f"Epoch: {i} Accuracy: {correct/total}")

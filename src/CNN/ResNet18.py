@@ -6,26 +6,33 @@ class ResBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, down=False):
         super(ResBlock, self).__init__()
         stride = 2 if down else 1
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=1, bias=False)
 
-        self.skip = nn.Identity() if not down else nn.Conv2d(in_channels, out_channels, 1, stride=stride)
-        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.skip = nn.Identity() if not down \
+            else nn.Conv2d(in_channels, out_channels, 1, stride=stride, padding=0, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
-    def foward(self,x):
-        x = self.relu(self.bn1(self.conv1(x)))
-        x = self.bn2(self.conv1(x))
-        x+=self.skip(x)
+    def forward(self,x):
+        skip = self.skip(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.bn2(self.conv2(x))
+        x += skip
         return self.relu(x)
+
+    def __call__(self,x):
+        return self.forward(x)
 
 class ResNet18(nn.Module):
 
     def __init__(self):
         super(ResNet18, self).__init__()
         #7x7 Conv is too big for CIFAR, so we use 3x3 Conv
-        self.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
         self.res1 = ResBlock(64, 64, 3)

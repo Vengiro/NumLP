@@ -31,9 +31,7 @@ class MyConv2D(nn.Module):
         self.padding = padding
         self.bias = bias
 
-        ## Create the torch.nn.Parameter for the weights and bias (if bias=True)
-        ## Be careful about the size
-        # ----- TODO -----
+
 
         # He initialization for the weights
         # Parameters otherwise they don't get optimized
@@ -58,8 +56,6 @@ class MyConv2D(nn.Module):
         output (torch.tensor) : (batch_size, out_channels, output_height, output_width)
         """
 
-        # call MyFConv2D here
-        # ----- TODO -----
 
         out_height = (x.shape[2] - self.kernel_size + 2 * self.padding) // self.stride + 1
         out_width = (x.shape[3] - self.kernel_size + 2 * self.padding) // self.stride + 1
@@ -95,10 +91,7 @@ class MyMaxPool2D(nn.Module):
         super().__init__()
         self.kernel_size = kernel_size
 
-        ## Take care of the stride
-        ## Hint: what should be the default stride_size if it is not given? 
-        ## Think about the relationship with kernel_size
-        # ----- TODO -----
+
         self.stride = stride if stride is not None else kernel_size
 
 
@@ -127,8 +120,7 @@ class MyMaxPool2D(nn.Module):
         self.input_height = x.shape[2]
         self.input_width = x.shape[3]
         
-        ## Derive the output size
-        # ----- TODO -----
+
         self.output_height   = (self.input_height - self.kernel_size) // self.stride + 1
         self.output_width    = (self.input_width - self.kernel_size) // self.stride + 1
         self.output_channels = self.channel
@@ -144,10 +136,6 @@ class MyMaxPool2D(nn.Module):
         # find max value in each window
         self.x_pool_out = flatX.max(-1)[0]
 
-
-        ## Maxpooling process
-        ## Feel free to use for loop
-        # ----- TODO -----
 
         return self.x_pool_out
 
