@@ -4,6 +4,7 @@ from jupyter_client.consoleapp import classes
 
 from MyCNN import *
 from FCNN import *
+from ResNet18 import *
 from utilsCNN import *
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
@@ -17,32 +18,32 @@ def main(epochs=15):
 
     train_loader = DataLoader(train_images, batch_size=256, shuffle=True)
     test_loader = DataLoader(test_images, batch_size=256, shuffle=False)
-    """
+    """    
     model = FCNN(in_dim=img_dim[0]*img_dim[1]*img_dim[2], out_dim=100)
-    loss = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    X_epoch = np.arange(epochs)+1
-    loss_train, loss_test = train(train_loader, test_loader, epochs, model, loss, optimizer)
-
-    plt.title('Loss FCNN')
-    plt.plot(X_epoch, loss_train, label='Train Loss')
-    plt.plot(X_epoch, loss_test, label='Test Loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
+    trainNplot(train_loader, test_loader, epochs, model, 'Loss FCNN')
 
     visualize(model, test_loader, classes)
-    """
+   
     model = CNN(3, 100)
     loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     X_epoch = np.arange(epochs) + 1
     loss_train, loss_test = train(train_loader, test_loader, epochs, model, loss, optimizer)
+    trainNplot(train_loader, test_loader, epochs, model, 'Loss CNN')
 
-    plt.title('Loss CNN')
+    visualize(model, test_loader, classes)
+    """
+    model = ResNet18()
+    trainNplot(train_loader, test_loader, epochs, model, 'Loss ResNet18')
+def trainNplot(train_loader, test_loader, epoch, model, title):
+    loss = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    X_epoch = np.arange(epoch) + 1
+    loss_train, loss_test = train(train_loader, test_loader, epoch, model, loss, optimizer)
+
+    plt.title(title)
     plt.plot(X_epoch, loss_train, label='Train Loss')
     plt.plot(X_epoch, loss_test, label='Test Loss')
     plt.xlabel('Epochs')
@@ -50,7 +51,6 @@ def main(epochs=15):
     plt.legend()
     plt.show()
 
-    visualize(model, test_loader, classes)
 
 def train(train_loader, test_loader, epoch, model, loss, optimizer):
     loss_train_list = []
