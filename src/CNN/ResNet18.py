@@ -43,7 +43,7 @@ class ResNet18(nn.Module):
         self.res6 = ResBlock(256, 256, 3)
         self.res7 = ResBlock(256, 512, 3, down=True)
         self.res8 = ResBlock(512, 512, 3)
-        self.fc = nn.Linear(512*4*4, 100)
+        self.fc = nn.Linear(512, 100)
 
     def forward(self, x):
         x = self.relu(self.bn1(self.conv1(x)))
@@ -55,6 +55,8 @@ class ResNet18(nn.Module):
         x = self.res6(x)
         x = self.res7(x)
         x = self.res8(x)
+        #Overfitting so avgpool
+        x = F.avg_pool2d(x, 4)
         x = x.view(-1, x.shape[1]*x.shape[2]*x.shape[3])
         x = self.fc(x)
         return x

@@ -15,6 +15,8 @@ def main(epochs=15):
     test_images = datasets.CIFAR100(root='data', train=False, download=True, transform=transforms.ToTensor())
     classes = train_images.classes
     img_dim = train_images[0][0].shape
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Device: {device}")
 
     train_loader = DataLoader(train_images, batch_size=256, shuffle=True)
     test_loader = DataLoader(test_images, batch_size=256, shuffle=False)
@@ -34,14 +36,14 @@ def main(epochs=15):
 
     visualize(model, test_loader, classes)
     """
-    model = ResNet18()
-    trainNplot(train_loader, test_loader, epochs, model, 'Loss ResNet18')
-def trainNplot(train_loader, test_loader, epoch, model, title):
+    model = ResNet18().to(device)
+    trainNplot(train_loader, test_loader, epochs, model, 'Loss ResNet18', device, 10)
+def trainNplot(train_loader, test_loader, epoch, model, title, device, nbVis=100):
     loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     X_epoch = np.arange(epoch) + 1
-    loss_train, loss_test = train(train_loader, test_loader, epoch, model, loss, optimizer)
+    loss_train, loss_test = train(train_loader, test_loader, epoch, model, loss, optimizer, device)
 
     plt.title(title)
     plt.plot(X_epoch, loss_train, label='Train Loss')
@@ -50,15 +52,17 @@ def trainNplot(train_loader, test_loader, epoch, model, title):
     plt.ylabel('Loss')
     plt.legend()
     plt.show()
+    visualize(model, test_loader, classes, device, nbVis)
 
 
-def train(train_loader, test_loader, epoch, model, loss, optimizer):
+def train(train_loader, test_loader, epoch, model, loss, optimizer, device):
     loss_train_list = []
     loss_test_list = []
     for i in range(epoch):
         model.train()
         loss_tr = 0
         for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
             out = model(x)
             l = loss(out, y)
@@ -75,6 +79,7 @@ def train(train_loader, test_loader, epoch, model, loss, optimizer):
         total = 0
         l_pred = 0
         for x, y in test_loader:
+            x, y = x.to(device), y.to(device)
             predicted = model(x)
             l_pred += loss(predicted, y).item()
             predicted = torch.argmax(predicted, dim=1)
@@ -89,13 +94,13 @@ def train(train_loader, test_loader, epoch, model, loss, optimizer):
 
     return loss_train_list, loss_test_list
 
-def visualize(model, test_loader, classes):
+def visualize(model, test_loader, classes, device, n=100):
     model.eval()
     label_set = set()
     label_list = []
     img = []
     iterator = iter(test_loader)
-    while len(label_set) < 100:
+    while len(label_set) < n:
         try:
             x, y = next(iterator)
         except StopIteration:
@@ -108,7 +113,8 @@ def visualize(model, test_loader, classes):
                 label_list.append(y[i].item())
                 img.append(x[i])
 
-    label_pred = model.predict(torch.stack(img))
+    label_pred = model.predict(torch.stack(img).to(device))
+
 
     figure, ax = plt.subplots(20, 5, figsize=(20, 80))
     for i in range(100):
