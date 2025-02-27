@@ -9,7 +9,7 @@ from utilsCNN import *
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
-def main(epochs=15):
+def main(epochs=1):
 
     train_images = datasets.CIFAR100(root='data', train=True, download=True, transform=transforms.ToTensor())
     test_images = datasets.CIFAR100(root='data', train=False, download=True, transform=transforms.ToTensor())
@@ -18,8 +18,8 @@ def main(epochs=15):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    train_loader = DataLoader(train_images, batch_size=256, shuffle=True)
-    test_loader = DataLoader(test_images, batch_size=256, shuffle=False)
+    train_loader = DataLoader(train_images, batch_size=2000, shuffle=True)
+    test_loader = DataLoader(test_images, batch_size=2000, shuffle=False)
     """    
     model = FCNN(in_dim=img_dim[0]*img_dim[1]*img_dim[2], out_dim=100)
     trainNplot(train_loader, test_loader, epochs, model, 'Loss FCNN')
@@ -116,8 +116,8 @@ def visualize(model, test_loader, classes, device, n=100):
     label_pred = model.predict(torch.stack(img).to(device))
 
 
-    figure, ax = plt.subplots(20, 5, figsize=(20, 80))
-    for i in range(100):
+    figure, ax = plt.subplots(n//5, 5, figsize=(20, 80))
+    for i in range(n):
         ax[i//5, i%5].imshow(img[i].permute(1, 2, 0))
         ax[i//5, i%5].set_title(f"True: {classes[label_list[i]]}{label_list[i]} Pred: {classes[label_pred[i]]}{label_pred[i]}", fontsize=12, color='green' if label_list[i] == label_pred[i] else 'red')
         ax[i//5, i%5].axis('off')

@@ -63,3 +63,6 @@ class ResNet18(nn.Module):
 
     def __call__(self, x):
         return self.forward(x)
+
+    def predict(self, x):
+        return torch.argmax(self.forward(x), dim=1)
