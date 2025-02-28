@@ -15,17 +15,14 @@ confidence_treshold = 0.5
 iou_treshold = 0.5
 path_image = "val2017"
 path_ann = "annotations/instances_val2017.json"
+# Mapping from annotations class to models class because they are a discrepancy between the two.......
+NINTY_TO_EIGHTY = {"1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "13": 12, "14": 13, "15": 14, "16": 15, "17": 16, "18": 17, "19": 18, "20": 19, "21": 20, "22": 21, "23": 22, "24": 23, "25": 24, "27": 25, "28": 26, "31": 27, "32": 28, "33": 29, "34": 30, "35": 31, "36": 32, "37": 33, "38": 34, "39": 35, "40": 36, "41": 37, "42": 38, "43": 39, "44": 40, "46": 41, "47": 42, "48": 43, "49": 44, "50": 45, "51": 46, "52": 47, "53": 48, "54": 49, "55": 50, "56": 51, "57": 52, "58": 53, "59": 54, "60": 55, "61": 56, "62": 57, "63": 58, "64": 59, "65": 60, "67": 61, "70": 62, "72": 63, "73": 64, "74": 65, "75": 66, "76": 67, "77": 68, "78": 69, "79": 70, "80": 71, "81": 72, "82": 73, "84": 74, "85": 75, "86": 76, "87": 77, "88": 78, "89": 79, "90": 80}
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def IoU(box1, box2):
 
-def IoU(box1, box2, yolo=True):
 
-    if yolo:
-        x1, y1, w1, h1 = box1
-        x2, y2, w2, h2 = box2
-        x1min, y1max, x1max, y1max = x1-w1/2, y1-h1/2, x1+w1/2, y1+h1/2
-        x2min, y2max, x2max, y2max = x2-w2/2, y2-h2/2, x2+w2/2, y2+h2/2
-    else:
-        x1min, y1min, x1max, y1max = box1
-        x2min, y2min, x2max, y2max = box2
+    x1min, y1min, x1max, y1max = box1
+    x2min, y2min, x2max, y2max = box2
 
     xA = max(x1min, x2min)
     yA = max(y1min, y2min)
@@ -37,24 +34,27 @@ def IoU(box1, box2, yolo=True):
     iou = interArea / float(box1Area + box2Area - interArea)
     return iou
 
-def prAndrcl(prediction, truth, model=True):
+def prAndrcl(prediction, truth, nb_truth):
 
     # Sort predictions by confidence
     prediction = sorted(prediction, key=lambda x: x[1], reverse=True)
     tp = 0
     fp = 0
-    fn = len(truth)
+    fn = nb_truth
     matched_true_ind = set()
     precision = []
     recall = []
     for pred in prediction:
+        if pred[3] not in truth:
+            continue
+        real_res = truth[pred[3]]
         best_iou = 0
         current_iou = 0
         best_iou_ind = None
-        for ind, true in enumerate(truth):
+        for ind, true in enumerate(real_res):
             #Find best match
-            if pred[2]==true[2] and ind not in matched_true_ind:
-                current_iou = IoU(pred[0], true[0], yolo=model)
+            if int(pred[2])==(NINTY_TO_EIGHTY[str(true[1])]-1) and ind not in matched_true_ind:
+                current_iou = IoU(pred[0], true[0])
                 if current_iou > best_iou:
                     best_iou = current_iou
                     best_iou_ind = ind
@@ -81,14 +81,21 @@ def AP(precision, recall):
     ap = 0
     for i in range(1, len(precision)):
         ap += precision[i] * (recall[i] - recall[i-1])
-    ap/= (len(precision)-1)
+    ap/= (len(precision)-1) if len(precision)>1 else 1
     return ap
-def mAP(predictions_class, truths_class, model=True):
+def mAP(predictions_class, truths, classes, nb_per_class):
 
     aps = []
-    for class_pred, class_truth in zip(predictions_class, truths_class):
-        precision, recall = prAndrcl(class_pred, class_truth, model)
-        aps.append(AP(precision, recall))
+    for cls in classes:
+        precision = []
+        recall = []
+
+        # If there is less than two pred for this class, we can't calculate the integral
+        if len(predictions_class[cls])>1:
+            precision, recall = prAndrcl(predictions_class[cls], truths, nb_per_class[cls])
+            ap = AP(precision, recall)
+            aps.append(ap)
+
 
     return np.mean(aps)
 
@@ -96,24 +103,29 @@ def mAP(predictions_class, truths_class, model=True):
 
 def main():
     # Load the model
-    faster_rcnn = fasterrcnn.fasterrcnn_resnet50_fpn(pretrained=True)
+    faster_rcnn = fasterrcnn.fasterrcnn_resnet50_fpn(pretrained=True).to(device)
     faster_rcnn.eval()
 
-    yolo_model = yolo.YOLO("yolov8s.pt")
+    yolo_model = yolo.YOLO("yolov8s.pt").to(device)
 
     transform = transforms.Compose([
         transforms.ToTensor(),
     ])
 
-    predictions_yolo = {}
-    predictions_frcnn = {}
+    predictions_yolo = []
+    predictions_frcnn = []
     t_yolo = 0
     t_rcnn = 0
     iteration = 0
+    # Cry in preprocessing.......
+
     for image_name in os.listdir(path_image):
+        if iteration == 1:
+            break
         # Load image
         img_path = os.path.join(path_image, image_name)
         img = Image.open(img_path)
+        img = img.convert("RGB")
         # Need to pad the image since YOLO want multiple of 32
         img = np.array(img)
         pad_y = [[[0, 0, 0] for i in range  (img.shape[1])] for j in range(32 - img.shape[0] % 32)]
@@ -122,27 +134,36 @@ def main():
         img = np.concatenate((img, pad_x), axis=1)
         img = transform(img).unsqueeze(0).float()
         img/=255
-
+        img = img.to(device)
+        id_img = image_name.split(".")[0]
+        id_img = int(id_img)
 
 
         # Make prediction
-        with torch.no_grad():  # No gradient computation during inference
+        with torch.no_grad():
             st = time.time()
-            pred_y = yolo_model(img)
-            t_yolo += time.time()-st
+            pred_y = yolo_model(img,verbose=False)
+            t_yolo += time.time() - st
+            cls = pred_y[0].boxes.cls.cpu().numpy()
+            conf = pred_y[0].boxes.conf.cpu().numpy()
+            boxes = pred_y[0].boxes.xyxy.cpu().numpy()
+            for i in range(len(boxes)):
+                if conf[i] > confidence_treshold:
+                    predictions_yolo.append([boxes[i], conf[i], cls[i], id_img])
+
+
+
             st = time.time()
             pred_f = faster_rcnn(img)
-            t_rcnn += time.time()-st
+            t_rcnn += time.time() - st
+            boxes = pred_f[0]["boxes"].cpu().numpy()
+            scores = pred_f[0]["scores"].cpu().numpy()
+            label = pred_f[0]["labels"].cpu().numpy()
+            for i in range(len(boxes)):
+                if scores[i] > confidence_treshold:
+                    predictions_frcnn.append([boxes[i], scores[i], label[i], id_img])
 
-        if predictions_yolo.get(image_name) is None:
-            predictions_yolo[image_name] = [pred_y]
-        else:
-            predictions_yolo[image_name].append(pred_y)
 
-        if predictions_frcnn.get(image_name) is None:
-            predictions_frcnn[image_name] = [pred_f]
-        else:
-            predictions_frcnn[image_name].append(pred_f)
         iteration += 1
 
     t_yolo /= iteration
@@ -154,13 +175,42 @@ def main():
         data = json.load(f)
     truths = {}
     for ann in data["annotations"]:
+        boxes = ann["bbox"]
+        boxes = [boxes[0], boxes[1], boxes[0]+boxes[2], boxes[1]+boxes[3]]
+        label = ann["category_id"]
+        res = [boxes, label]
         if ann["image_id"] in truths:
-            truths[ann["image_id"]].append(ann)
+            truths[ann["image_id"]].append(res)
         else:
-            truths[ann["image_id"]] = [ann]
+            truths[ann["image_id"]] = [res]
 
-    mAP_yolo = mAP(predictions_yolo, truths, model=True)
-    mAP_frcnn = mAP(predictions_frcnn, truths, model=False)
+    pred_yolo_class = {}
+    pred_frcnn_class = {}
+
+    # Sort predictions by class
+    classes= set()
+    nb_per_class = {}
+    for img in truths:
+        for box, cls in truths[img]:
+            classes.add(NINTY_TO_EIGHTY[str(cls)]-1)
+            if NINTY_TO_EIGHTY[str(cls)]-1 in nb_per_class:
+                nb_per_class[NINTY_TO_EIGHTY[str(cls)]-1] += 1
+            else:
+                nb_per_class[NINTY_TO_EIGHTY[str(cls)]-1] = 1
+
+    for cls in classes:
+        pred_yolo_class[cls] = []
+        pred_frcnn_class[cls] = []
+        for pred in predictions_yolo:
+            if pred[2] == cls:
+                pred_yolo_class[cls].append(pred)
+        for pred in predictions_frcnn:
+            if pred[2] == cls:
+                pred_frcnn_class[cls].append(pred)
+
+
+    mAP_yolo = mAP(pred_yolo_class, truths, classes, nb_per_class)
+    mAP_frcnn = mAP(pred_frcnn_class, truths, classes, nb_per_class)
 
     print(f"The latency of YOLO is {t_yolo} and the mAP is {mAP_yolo}")
     print(f"The latency of FasterRCNN is {t_rcnn} and the mAP is {mAP_frcnn}")

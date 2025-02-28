@@ -145,10 +145,20 @@ class MyMaxPool2D(nn.Module):
     we can
 """
 def main():
-    test1(1, 3, 1, 1)
-    test2(2, 2)
+    data = torch.randn(1, 3, 10, 10)
+    test1Conv(data, 10)
+    test1Pool(data, 10)
+    test2Conv(1, 3, 1, 1)
+    test2Pool(2, 2)
 
-def test1(out_channels, kernel_size, stride, padding):
+
+def test1Conv(data, size):
+    l1 = MyConv2D(3, 32, 3, 2, 1)
+    res1 = l1(data)
+    assert res1.shape == (1, 32, size//2, size//2)
+    print('Test 1 convolution passed.')
+
+def test2Conv(out_channels, kernel_size, stride, padding):
     img = Image.open('2007_001239.jpg')
     h, w = img.size
     img = np.array(img)
@@ -157,11 +167,17 @@ def test1(out_channels, kernel_size, stride, padding):
     res1 = l1(img)
     new_h = (h + 2*padding - kernel_size) // stride + 1
     new_w = (w + 2*padding - kernel_size) // stride + 1
-    assert res1.shape == (1, out_channels, new_h, new_w)
-    print('Test 1 passed.')
+    assert res1.shape == (1, out_channels, new_w, new_h)
+    print('Test 2 convolution passed.')
     Image.fromarray(res1.squeeze(0).squeeze(0).byte().numpy()).show()
 
-def test2(kernel_size, stride=None):
+def test1Pool(data, size):
+    l2 = MyMaxPool2D(2, 2)
+    res2 = l2(data)
+    assert res2.shape == (1, 3, size//2, size//2)
+    print('Test 1 maxPooling passed.')
+
+def test2Pool(kernel_size, stride=None):
     img = Image.open('2007_001239.jpg')
     h, w = img.size
     img = np.array(img)
@@ -170,8 +186,8 @@ def test2(kernel_size, stride=None):
     res2 = l2(img)
     new_h = (h - kernel_size) // stride + 1
     new_w = (w - kernel_size) // stride + 1
-    assert res2.shape == (1, 3, new_h, new_w)
-    print('Test 2 passed.')
+    assert res2.shape == (1, 3, new_w, new_h)
+    print('Test 2 maxPooling passed.')
     Image.fromarray(res2.squeeze(0).permute(1, 2, 0).byte().numpy()).show()
 
 

@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from jupyter_client.consoleapp import classes
 
 from MyCNN import *
 from FCNN import *
@@ -20,7 +19,7 @@ def main(epochs=1):
 
     train_loader = DataLoader(train_images, batch_size=2000, shuffle=True)
     test_loader = DataLoader(test_images, batch_size=2000, shuffle=False)
-    """    
+
     model = FCNN(in_dim=img_dim[0]*img_dim[1]*img_dim[2], out_dim=100)
     trainNplot(train_loader, test_loader, epochs, model, 'Loss FCNN')
 
@@ -35,10 +34,10 @@ def main(epochs=1):
     trainNplot(train_loader, test_loader, epochs, model, 'Loss CNN')
 
     visualize(model, test_loader, classes)
-    """
+
     model = ResNet18().to(device)
-    trainNplot(train_loader, test_loader, epochs, model, 'Loss ResNet18', device, 10)
-def trainNplot(train_loader, test_loader, epoch, model, title, device, nbVis=100):
+    trainNplot(train_loader, test_loader, epochs, model, 'Loss ResNet18', device, classes, 10)
+def trainNplot(train_loader, test_loader, epoch, model, title, device, classes, nbVis=100):
     loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
