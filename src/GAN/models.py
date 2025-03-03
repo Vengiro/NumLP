@@ -1,4 +1,4 @@
-# CMU CMU 18-780/6 Homework 4
+# CMU 18-780/6 Homework 4
 # The code base is based on the great work from CSC 321, U Toronto
 # https://www.cs.toronto.edu/~rgrosse/courses/csc321_2018/assignments/a4-code.zip
 # CSC 321, Assignment 4
@@ -66,6 +66,8 @@ def conv(in_channels, out_channels, kernel_size, stride=2, padding=1,
         layers.append(nn.LeakyReLU())
     elif activ == 'tanh':
         layers.append(nn.Tanh())
+    elif activ == 'sigmoid':
+        layers.append(nn.Sigmoid())
     return nn.Sequential(*layers)
 
 
@@ -78,11 +80,10 @@ class DCGenerator(nn.Module):
         ##   FILL THIS IN: CREATE ARCHITECTURE   ##
         ###########################################
 
-        self.up_conv1 = 
-        self.up_conv2 = 
-        self.up_conv3 = 
-        self.up_conv4 = 
-        self.up_conv5 = 
+        self.up_conv1 = conv(noise_size, conv_dim*8, 4, 1, 0, None, False, 'relu')
+        self.up_conv3 = up_conv(conv_dim*4, conv_dim*2, 4, 2, 1, 4, 'instance', 'leaky')
+        self.up_conv4 = up_conv(conv_dim*2, conv_dim, 4, 2, 1, 4, 'instance', 'leaky')
+        self.up_conv5 = up_conv(conv_dim, 3, 4, 2, 1, 4, None, 'tanh')
 
     def forward(self, z):
         """
@@ -100,7 +101,12 @@ class DCGenerator(nn.Module):
         ##   FILL THIS IN: FORWARD PASS   ##
         ###########################################
 
-        pass
+        out = self.up_conv1(z)
+        out = self.up_conv2(out)
+        out = self.up_conv3(out)
+        out = self.up_conv4(out)
+        out = self.up_conv5(out)
+        return out
 
 
 class ResnetBlock(nn.Module):
@@ -118,16 +124,18 @@ class ResnetBlock(nn.Module):
         return out
 
 
+
 class DCDiscriminator(nn.Module):
     """Architecture of the discriminator network."""
 
     def __init__(self, conv_dim=64, norm='instance'):
         super().__init__()
-        self.conv1 = conv(3, 32, 4, 2, 1, norm, False, 'relu')
-        self.conv2 = 
-        self.conv3 = 
-        self.conv4 = 
-        self.conv5 = 
+        self.conv1 = conv(3, 32, 4, 2, 1, norm, False, 'leaky')
+        self.conv2 = conv(32, 64, 4, 2, 1, norm, False, 'leaky')
+        self.conv3 = conv(64, 128, 4, 2, 1, norm, False, 'leaky')
+        self.conv4 = conv(128, 256, 4, 2, 1, norm, False, 'leaky')
+        # Use Sigmoid because BCELoss is used so the output should be in [0, 1]
+        self.conv5 = conv(256, 1, 4, 1, 3, norm=None, activ='sigmoid')
 
     def forward(self, x):
         """Forward pass, x is (B, C, H, W)."""

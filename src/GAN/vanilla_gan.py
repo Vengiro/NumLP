@@ -156,6 +156,7 @@ def training_loop(train_dataloader, opts):
     iteration = 1
 
     total_train_iters = opts.num_epochs * len(train_dataloader)
+    lossFn = torch.nn.BCELoss()
 
     for _ in range(opts.num_epochs):
 
@@ -163,40 +164,49 @@ def training_loop(train_dataloader, opts):
 
             real_images = batch
             real_images = utils.to_var(real_images)
-
+            real_labels = torch.ones(real_images.size(0))
+            real_labels = utils.to_var(real_labels)
             # TRAIN THE DISCRIMINATOR
             # 1. Compute the discriminator loss on real images
-            D_real_loss = 
+            D_real_loss = lossFn(D(real_images), real_labels)
 
             # 2. Sample noise
-            noise = 
+            noise = sample_noise(real_images.size(0), opts.noise_size)
+            noise = utils.to_var(noise)
 
             # 3. Generate fake images from the noise
-            fake_images = 
+            fake_images = G(noise)
+            fake_labels = torch.zeros(fake_images.size(0))
+            fake_labels = utils.to_var(fake_labels)
 
             # 4. Compute the discriminator loss on the fake images
-            D_fake_loss = 
-            D_total_loss = 
+            D_fake_loss = lossFn(D(fake_images), fake_labels)
+            D_total_loss = D_real_loss + D_fake_loss
 
             # update the discriminator D
             d_optimizer.zero_grad()
             D_total_loss.backward()
             d_optimizer.step()
 
-            # TRAIN THE GENERATOR
-            # 1. Sample noise
-            noise = 
+            for i in range(5):
+                # TRAIN THE GENERATOR
+                # 1. Sample noise
+                noise = sample_noise(opts.batch_size, opts.noise_size)
+                noise = utils.to_var(noise)
 
-            # 2. Generate fake images from the noise
-            fake_images = 
+                # 2. Generate fake images from the noise
+                fake_images = G(noise)
+                fake_img_real_label = D(fake_images)
+                fake_img_fake_label = torch.ones(opts.batch_size)
+                fake_img_fake_label = utils.to_var(fake_img_fake_label)
 
-            # 3. Compute the generator loss
-            G_loss = 
+                # 3. Compute the generator loss
+                G_loss = lossFn(fake_img_real_label, fake_img_fake_label)
 
-            # update the generator G
-            g_optimizer.zero_grad()
-            G_loss.backward()
-            g_optimizer.step()
+                # update the generator G
+                g_optimizer.zero_grad()
+                G_loss.backward()
+                g_optimizer.step()
 
             # Print the log info
             if iteration % opts.log_step == 0:
