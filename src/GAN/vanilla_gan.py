@@ -23,6 +23,9 @@ import utils
 from data_loader import get_data_loader
 from models import DCGenerator, DCDiscriminator
 import matplotlib.pyplot as plt
+
+from src.GAN.model_variants import Critic
+
 policy = 'color,translation,cutout'
 
 SEED = 11
@@ -138,6 +141,107 @@ def sample_noise(batch_size, dim):
 
 
 def training_loop(train_dataloader, opts):
+    """Runs the training loop.
+        * Saves checkpoints every opts.checkpoint_every iterations
+        * Saves generated samples every opts.sample_every iterations
+    """
+
+    # Create generators and discriminators
+    G, D = create_model(opts)
+    C = Critic(opts.conv_dim)
+
+    # Create optimizers for the generators and discriminators
+    g_optimizer = optim.Adam(G.parameters(), opts.lr, [opts.beta1, opts.beta2])
+    c_optimizer = optim.Adam(C.parameters(), opts.lr, [opts.beta1, opts.beta2])
+
+    # Generate fixed noise for sampling from the generator
+    fixed_noise = sample_noise(opts.batch_size, opts.noise_size)  # B N 1 1
+
+    iteration = 1
+
+    total_train_iters = opts.num_epochs * len(train_dataloader)
+
+    lossG = []
+    lossC_real = []
+    lossC_fake = []
+
+    for _ in range(opts.num_epochs):
+
+        for batch in train_dataloader:
+
+            real_images = batch
+            real_images = utils.to_var(real_images)
+            # TRAIN THE CRITIC
+            # 1. Compute the critic loss on real images
+            C_real_loss = torch.mean(C(real_images))
+
+            # 2. Sample noise
+            noise = sample_noise(real_images.size(0), opts.noise_size)
+            noise = utils.to_var(noise)
+
+            # 3. Generate fake images from the noise
+            fake_images = G(noise)
+
+            # 4. Compute the discriminator loss on the fake images
+            C_fake_loss = torch.mean(C(fake_images))
+            C_total_loss = C_real_loss - C_fake_loss
+
+            # update the discriminator D
+            c_optimizer.zero_grad()
+            C_total_loss.backward()
+            c_optimizer.step()
+
+            # TRAIN THE GENERATOR
+            # 1. Sample noise
+            noise = sample_noise(opts.batch_size, opts.noise_size)
+            noise = utils.to_var(noise)
+
+            # 2. Generate fake images from the noise
+            fake_images = G(noise)
+            fake_img_real_label = C(fake_images)
+
+            # 3. Compute the generator loss
+            G_loss = -torch.mean(fake_img_real_label)
+
+            # update the generator G
+            g_optimizer.zero_grad()
+            G_loss.backward()
+            g_optimizer.step()
+
+
+
+            # Print the log info
+            if iteration % opts.log_step == 0:
+                print(
+                    'Iteration [{:4d}/{:4d}] | D_real_loss: {:6.4f} | '
+                    'D_fake_loss: {:6.4f} | G_loss: {:6.4f}'.format(
+                        iteration, total_train_iters, C_real_loss.item(),
+                        C_fake_loss.item(), G_loss.item()
+                    )
+                )
+                logger.add_scalar('D/fake', C_fake_loss, iteration)
+                logger.add_scalar('D/real', C_real_loss, iteration)
+                logger.add_scalar('D/total', C_total_loss, iteration)
+                logger.add_scalar('G/total', G_loss, iteration)
+
+            # Save the generated samples
+            if iteration % opts.sample_every == 0:
+                save_samples(G, fixed_noise, iteration, opts)
+                save_images(real_images, iteration, opts, 'real')
+
+            # Save the model parameters
+            if iteration % opts.checkpoint_every == 0:
+                checkpoint(iteration, G, D, opts)
+
+            iteration += 1
+
+        lossG.append(G_loss.item())
+        lossC_real.append(C_real_loss.item())
+        lossC_fake.append(C_fake_loss.item())
+
+    return lossG, lossC_real, lossC_fake
+
+def training_loop_WGAN(train_dataloader, opts):
     """Runs the training loop.
         * Saves checkpoints every opts.checkpoint_every iterations
         * Saves generated samples every opts.sample_every iterations

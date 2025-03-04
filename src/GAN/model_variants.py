@@ -85,6 +85,8 @@ def conv(in_channels, out_channels, kernel_size, stride=2, padding=1,
         layers.append(nn.Tanh())
     elif activ == 'sigmoid':
         layers.append(nn.Sigmoid())
+    elif activ == 'none':
+        pass
     return nn.Sequential(*layers)
 
 
@@ -165,5 +167,25 @@ class DCDiscriminator(nn.Module):
         self.conv4 = spectral_norm(self.conv4)
         x = self.conv4(x)
         self.conv5 = spectral_norm(self.conv5)
+        x = self.conv5(x)
+        return x.squeeze()
+
+class Critic(nn.Module):
+
+    def __init__(self, conv_dim=64, norm='instance'):
+        super().__init__()
+        self.conv1 = conv(3, 32, 4, 2, 1, norm, False, 'leaky')
+        self.conv2 = conv(32, 64, 4, 2, 1, norm, False, 'leaky')
+        self.conv3 = conv(64, 128, 4, 2, 1, norm, False, 'leaky')
+        self.conv4 = conv(128, 256, 4, 2, 1, norm, False, 'leaky')
+        # Use Sigmoid because BCELoss is used so the output should be in [0, 1]
+        self.conv5 = conv(256, 1, 4, 1, 3, norm=None, activ='none')
+
+    def forward(self, x):
+        """Forward pass, x is (B, C, H, W)."""
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
         x = self.conv5(x)
         return x.squeeze()
