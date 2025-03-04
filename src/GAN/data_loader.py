@@ -37,13 +37,14 @@ def get_data_loader(data_path, opts):
     if opts.data_preprocess == 'basic':
         train_transform = basic_transform
     elif opts.data_preprocess == 'advanced':
-        # todo: add your code here: below are some ideas for your reference
-        # load_size = int(1.1 * opts.image_size)
-        # osize = [load_size, load_size]
-        # transforms.Resize(osize, Image.BICUBIC)
-        # transforms.RandomCrop(opts.image_size)
-        # transforms.RandomHorizontalFlip()
-        pass
+        load_size = int(1.1 * opts.image_size)
+        train_transform = transforms.Compose([
+            transforms.Resize(load_size, Image.BICUBIC),
+            transforms.RandomCrop(opts.image_size),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
+            basic_transform, # use basic compose to get back to original size and distribution
+        ])
 
     dataset = CustomDataSet(
         os.path.join('data/', data_path), opts.ext, train_transform

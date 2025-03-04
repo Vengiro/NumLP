@@ -13,6 +13,7 @@ import argparse
 import os
 
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim as optim
@@ -21,8 +22,7 @@ from torch.utils.tensorboard import SummaryWriter
 import utils
 from data_loader import get_data_loader
 from models import DCGenerator, DCDiscriminator
-
-
+import matplotlib.pyplot as plt
 policy = 'color,translation,cutout'
 
 SEED = 11
@@ -158,6 +158,10 @@ def training_loop(train_dataloader, opts):
     total_train_iters = opts.num_epochs * len(train_dataloader)
     lossFn = torch.nn.BCELoss()
 
+    lossG = []
+    lossD_real = []
+    lossD_fake = []
+
     for _ in range(opts.num_epochs):
 
         for batch in train_dataloader:
@@ -188,25 +192,26 @@ def training_loop(train_dataloader, opts):
             D_total_loss.backward()
             d_optimizer.step()
 
-            for i in range(5):
-                # TRAIN THE GENERATOR
-                # 1. Sample noise
-                noise = sample_noise(opts.batch_size, opts.noise_size)
-                noise = utils.to_var(noise)
+            # TRAIN THE GENERATOR
+            # 1. Sample noise
+            noise = sample_noise(opts.batch_size, opts.noise_size)
+            noise = utils.to_var(noise)
 
-                # 2. Generate fake images from the noise
-                fake_images = G(noise)
-                fake_img_real_label = D(fake_images)
-                fake_img_fake_label = torch.ones(opts.batch_size)
-                fake_img_fake_label = utils.to_var(fake_img_fake_label)
+            # 2. Generate fake images from the noise
+            fake_images = G(noise)
+            fake_img_real_label = D(fake_images)
+            fake_img_fake_label = torch.ones(opts.batch_size)
+            fake_img_fake_label = utils.to_var(fake_img_fake_label)
 
-                # 3. Compute the generator loss
-                G_loss = lossFn(fake_img_real_label, fake_img_fake_label)
+            # 3. Compute the generator loss
+            G_loss = lossFn(fake_img_real_label, fake_img_fake_label)
 
-                # update the generator G
-                g_optimizer.zero_grad()
-                G_loss.backward()
-                g_optimizer.step()
+            # update the generator G
+            g_optimizer.zero_grad()
+            G_loss.backward()
+            g_optimizer.step()
+
+
 
             # Print the log info
             if iteration % opts.log_step == 0:
@@ -233,6 +238,12 @@ def training_loop(train_dataloader, opts):
 
             iteration += 1
 
+        lossG.append(G_loss.item())
+        lossD_real.append(D_real_loss.item())
+        lossD_fake.append(D_fake_loss.item())
+
+    return lossG, lossD_real, lossD_fake
+
 
 def main(opts):
     """Loads the data and starts the training loop."""
@@ -244,7 +255,17 @@ def main(opts):
     utils.create_dir(opts.checkpoint_dir)
     utils.create_dir(opts.sample_dir)
 
-    training_loop(dataloader, opts)
+    lossG, lossD_real, lossD_fake = training_loop(dataloader, opts)
+
+    x = np.arange(0, opts.num_epochs)
+    plt.plot(x, lossG, label='Generator')
+    plt.plot(x, lossD_real, label='Discriminator Real')
+    plt.plot(x, lossD_fake, label='Discriminator Fake')
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.show()
 
 
 def create_parser():
