@@ -76,11 +76,10 @@ class DCGenerator(nn.Module):
     def __init__(self, noise_size, conv_dim=64):
         super().__init__()
 
-        ###########################################
-        ##   FILL THIS IN: CREATE ARCHITECTURE   ##
-        ###########################################
 
-        self.up_conv1 = conv(noise_size, conv_dim*8, 4, 1, 0, None, False, 'relu')
+
+        self.up_conv1 = conv(noise_size, conv_dim*8, 4, 1, 3, None, False, 'leaky')
+        self.up_conv2 = up_conv(conv_dim*8, conv_dim*4, 4, 2, 1, 4, 'instance', 'leaky')
         self.up_conv3 = up_conv(conv_dim*4, conv_dim*2, 4, 2, 1, 4, 'instance', 'leaky')
         self.up_conv4 = up_conv(conv_dim*2, conv_dim, 4, 2, 1, 4, 'instance', 'leaky')
         self.up_conv5 = up_conv(conv_dim, 3, 4, 2, 1, 4, None, 'tanh')
@@ -97,9 +96,6 @@ class DCGenerator(nn.Module):
         ------
             out: BS x channels x image_width x image_height  -->  16x3x64x64
         """
-        ###########################################
-        ##   FILL THIS IN: FORWARD PASS   ##
-        ###########################################
 
         out = self.up_conv1(z)
         out = self.up_conv2(out)
@@ -135,7 +131,7 @@ class DCDiscriminator(nn.Module):
         self.conv3 = conv(64, 128, 4, 2, 1, norm, False, 'leaky')
         self.conv4 = conv(128, 256, 4, 2, 1, norm, False, 'leaky')
         # Use Sigmoid because BCELoss is used so the output should be in [0, 1]
-        self.conv5 = conv(256, 1, 4, 1, 3, norm=None, activ='sigmoid')
+        self.conv5 = conv(256, 1, 4, 1, 0, None, False, 'sigmoid')
 
     def forward(self, x):
         """Forward pass, x is (B, C, H, W)."""

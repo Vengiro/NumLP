@@ -15,23 +15,23 @@
 import torch
 import torch.nn as nn
 
-def spectral_norm(W, num_iters=1):
+def spectral_norm(S, num_iters=1):
 
+    if isinstance(S, nn.Sequential):
+        W = S[0].weight
     W_shape = W.shape
     W = W.view(W_shape[0], -1)  # Flatten the weight matrix if it's higher dimensional
 
     u = torch.randn(W.shape[0], device=W.device)
     v = torch.randn(W.shape[1], device=W.device)
 
-    # Power iteration to estimate the largest singular value
     for i in range(num_iters):
         v = torch.nn.functional.normalize(torch.matmul(W.T, u), dim=0)
         u = torch.nn.functional.normalize(torch.matmul(W, v), dim=0)
 
     sigma = torch.dot(u, torch.matmul(W, v))
     W_sn = W / sigma
-
-    return W_sn.view(W_shape)
+    S[0].weight.data = W_sn.view(W_shape)
 
 def up_conv(in_channels, out_channels, kernel_size, stride=1, padding=1,
             scale_factor=2, norm='batch', activ=None):
@@ -95,11 +95,8 @@ class DCGenerator(nn.Module):
     def __init__(self, noise_size, conv_dim=64):
         super().__init__()
 
-        ###########################################
-        ##   FILL THIS IN: CREATE ARCHITECTURE   ##
-        ###########################################
-
-        self.up_conv1 = conv(noise_size, conv_dim*8, 4, 1, 0, None, False, 'relu')
+        self.up_conv1 = conv(noise_size, conv_dim*8, 4, 1, 3, None, False, 'leaky')
+        self.up_conv2 = up_conv(conv_dim*8, conv_dim*4, 4, 2, 1, 4, 'instance', 'leaky')
         self.up_conv3 = up_conv(conv_dim*4, conv_dim*2, 4, 2, 1, 4, 'instance', 'leaky')
         self.up_conv4 = up_conv(conv_dim*2, conv_dim, 4, 2, 1, 4, 'instance', 'leaky')
         self.up_conv5 = up_conv(conv_dim, 3, 4, 2, 1, 4, None, 'tanh')
@@ -116,9 +113,7 @@ class DCGenerator(nn.Module):
         ------
             out: BS x channels x image_width x image_height  -->  16x3x64x64
         """
-        ###########################################
-        ##   FILL THIS IN: FORWARD PASS   ##
-        ###########################################
+
 
         out = self.up_conv1(z)
         out = self.up_conv2(out)
@@ -144,7 +139,7 @@ class ResnetBlock(nn.Module):
 
 
 
-class DCDiscriminator(nn.Module):
+class DCDiscriminatorvar(nn.Module):
     """Architecture of the discriminator network."""
 
     def __init__(self, conv_dim=64, norm='instance'):
@@ -154,19 +149,19 @@ class DCDiscriminator(nn.Module):
         self.conv3 = conv(64, 128, 4, 2, 1, norm, False, 'leaky')
         self.conv4 = conv(128, 256, 4, 2, 1, norm, False, 'leaky')
         # Use Sigmoid because BCELoss is used so the output should be in [0, 1]
-        self.conv5 = conv(256, 1, 4, 1, 3, norm=None, activ='sigmoid')
+        self.conv5 = conv(256, 1, 4, 1, 0, None, activ='sigmoid')
 
     def forward(self, x):
         """Forward pass, x is (B, C, H, W)."""
-        self.conv1 = spectral_norm(self.conv1)
+        spectral_norm(self.conv1)
         x = self.conv1(x)
-        self.conv2 = spectral_norm(self.conv2)
+        spectral_norm(self.conv2)
         x = self.conv2(x)
-        self.conv3 = spectral_norm(self.conv3)
+        spectral_norm(self.conv3)
         x = self.conv3(x)
-        self.conv4 = spectral_norm(self.conv4)
+        spectral_norm(self.conv4)
         x = self.conv4(x)
-        self.conv5 = spectral_norm(self.conv5)
+        spectral_norm(self.conv5)
         x = self.conv5(x)
         return x.squeeze()
 
@@ -178,7 +173,6 @@ class Critic(nn.Module):
         self.conv2 = conv(32, 64, 4, 2, 1, norm, False, 'leaky')
         self.conv3 = conv(64, 128, 4, 2, 1, norm, False, 'leaky')
         self.conv4 = conv(128, 256, 4, 2, 1, norm, False, 'leaky')
-        # Use Sigmoid because BCELoss is used so the output should be in [0, 1]
         self.conv5 = conv(256, 1, 4, 1, 3, norm=None, activ='none')
 
     def forward(self, x):

@@ -21,7 +21,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 import utils
 from data_loader import get_data_loader
-from models import DCGenerator, DCDiscriminator
+from model_variants import DCGenerator, DCDiscriminatorvar, Critic
+from models import DCDiscriminator
 import matplotlib.pyplot as plt
 
 from src.GAN.model_variants import Critic
@@ -140,7 +141,7 @@ def sample_noise(batch_size, dim):
     ).unsqueeze(2).unsqueeze(3)
 
 
-def training_loop(train_dataloader, opts):
+def training_loop_WGAN(train_dataloader, opts):
     """Runs the training loop.
         * Saves checkpoints every opts.checkpoint_every iterations
         * Saves generated samples every opts.sample_every iterations
@@ -149,10 +150,11 @@ def training_loop(train_dataloader, opts):
     # Create generators and discriminators
     G, D = create_model(opts)
     C = Critic(opts.conv_dim)
+    utils.to_var(C)
 
     # Create optimizers for the generators and discriminators
-    g_optimizer = optim.Adam(G.parameters(), opts.lr, [opts.beta1, opts.beta2])
-    c_optimizer = optim.Adam(C.parameters(), opts.lr, [opts.beta1, opts.beta2])
+    g_optimizer = optim.Adam(G.parameters(), opts.lr*4, [opts.beta1, opts.beta2])
+    c_optimizer = optim.Adam(C.parameters(), opts.lr*2, [opts.beta1, opts.beta2])
 
     # Generate fixed noise for sampling from the generator
     fixed_noise = sample_noise(opts.batch_size, opts.noise_size)  # B N 1 1
@@ -182,14 +184,18 @@ def training_loop(train_dataloader, opts):
             # 3. Generate fake images from the noise
             fake_images = G(noise)
 
-            # 4. Compute the discriminator loss on the fake images
+            # 4. Compute the critic loss on the fake images
             C_fake_loss = torch.mean(C(fake_images))
-            C_total_loss = C_real_loss - C_fake_loss
+            C_total_loss = C_fake_loss - C_real_loss
 
-            # update the discriminator D
+            # update the critic C
             c_optimizer.zero_grad()
             C_total_loss.backward()
             c_optimizer.step()
+
+            #Clamp
+            for p in C.parameters():
+                p.data.clamp_(-0.01, 0.01)
 
             # TRAIN THE GENERATOR
             # 1. Sample noise
@@ -241,7 +247,7 @@ def training_loop(train_dataloader, opts):
 
     return lossG, lossC_real, lossC_fake
 
-def training_loop_WGAN(train_dataloader, opts):
+def training_loop_LSGAN(train_dataloader, opts):
     """Runs the training loop.
         * Saves checkpoints every opts.checkpoint_every iterations
         * Saves generated samples every opts.sample_every iterations
@@ -253,6 +259,116 @@ def training_loop_WGAN(train_dataloader, opts):
     # Create optimizers for the generators and discriminators
     g_optimizer = optim.Adam(G.parameters(), opts.lr, [opts.beta1, opts.beta2])
     d_optimizer = optim.Adam(D.parameters(), opts.lr, [opts.beta1, opts.beta2])
+
+    # Generate fixed noise for sampling from the generator
+    fixed_noise = sample_noise(opts.batch_size, opts.noise_size)  # B N 1 1
+
+    iteration = 1
+
+    total_train_iters = opts.num_epochs * len(train_dataloader)
+    lossFn = torch.nn.MSELoss()
+
+    lossG = []
+    lossD_real = []
+    lossD_fake = []
+
+
+    for _ in range(opts.num_epochs):
+
+        for batch in train_dataloader:
+
+            real_images = batch
+            real_images = utils.to_var(real_images)
+            real_labels = torch.ones(real_images.size(0))
+            real_labels = utils.to_var(real_labels)
+            # TRAIN THE DISCRIMINATOR
+            # 1. Compute the discriminator loss on real images
+            D_real_loss = lossFn(D(real_images), real_labels)
+
+            # 2. Sample noise
+            noise = sample_noise(real_images.size(0), opts.noise_size)
+            noise = utils.to_var(noise)
+
+            # 3. Generate fake images from the noise
+            fake_images = G(noise)
+            fake_labels = torch.zeros(fake_images.size(0))
+            fake_labels = utils.to_var(fake_labels)
+
+            # 4. Compute the discriminator loss on the fake images
+            D_fake_loss = lossFn(D(fake_images), fake_labels)
+            D_total_loss = 0.5 * (D_real_loss + D_fake_loss)
+
+            # update the discriminator D
+            d_optimizer.zero_grad()
+            D_total_loss.backward()
+            d_optimizer.step()
+
+            # TRAIN THE GENERATOR
+            # 1. Sample noise
+            noise = sample_noise(opts.batch_size, opts.noise_size)
+            noise = utils.to_var(noise)
+
+            # 2. Generate fake images from the noise
+            fake_images = G(noise)
+            fake_img_real_label = D(fake_images)
+            fake_img_fake_label = torch.ones(opts.batch_size)
+            fake_img_fake_label = utils.to_var(fake_img_fake_label)
+
+            # 3. Compute the generator loss
+            G_loss = lossFn(fake_img_real_label, fake_img_fake_label)
+
+            # update the generator G
+            g_optimizer.zero_grad()
+            G_loss.backward()
+            g_optimizer.step()
+
+
+
+            # Print the log info
+            if iteration % opts.log_step == 0:
+                print(
+                    'Iteration [{:4d}/{:4d}] | D_real_loss: {:6.4f} | '
+                    'D_fake_loss: {:6.4f} | G_loss: {:6.4f}'.format(
+                        iteration, total_train_iters, D_real_loss.item(),
+                        D_fake_loss.item(), G_loss.item()
+                    )
+                )
+                logger.add_scalar('D/fake', D_fake_loss, iteration)
+                logger.add_scalar('D/real', D_real_loss, iteration)
+                logger.add_scalar('D/total', D_total_loss, iteration)
+                logger.add_scalar('G/total', G_loss, iteration)
+
+            # Save the generated samples
+            if iteration % opts.sample_every == 0:
+                save_samples(G, fixed_noise, iteration, opts)
+                save_images(real_images, iteration, opts, 'real')
+
+            # Save the model parameters
+            if iteration % opts.checkpoint_every == 0:
+                checkpoint(iteration, G, D, opts)
+
+            iteration += 1
+
+        lossG.append(G_loss.item())
+        lossD_real.append(D_real_loss.item())
+        lossD_fake.append(D_fake_loss.item())
+
+    return lossG, lossD_real, lossD_fake
+
+def training_loop_spectral(train_dataloader, opts):
+    """Runs the training loop.
+        * Saves checkpoints every opts.checkpoint_every iterations
+        * Saves generated samples every opts.sample_every iterations
+    """
+
+    # Create generators and discriminators
+    G, D = create_model(opts)
+    D = DCDiscriminatorvar(conv_dim=opts.conv_dim)
+    utils.to_var(D)
+
+    # Create optimizers for the generators and discriminators
+    g_optimizer = optim.Adam(G.parameters(), opts.lr, [opts.beta1, opts.beta2])
+    d_optimizer = optim.Adam(D.parameters(), opts.lr/4, [opts.beta1, opts.beta2])
 
     # Generate fixed noise for sampling from the generator
     fixed_noise = sample_noise(opts.batch_size, opts.noise_size)  # B N 1 1
@@ -349,6 +465,114 @@ def training_loop_WGAN(train_dataloader, opts):
     return lossG, lossD_real, lossD_fake
 
 
+def training_loop(train_dataloader, opts):
+    """Runs the training loop.
+        * Saves checkpoints every opts.checkpoint_every iterations
+        * Saves generated samples every opts.sample_every iterations
+    """
+
+    # Create generators and discriminators
+    G, D = create_model(opts)
+
+    # Create optimizers for the generators and discriminators
+    g_optimizer = optim.Adam(G.parameters(), opts.lr, [opts.beta1, opts.beta2])
+    d_optimizer = optim.Adam(D.parameters(), opts.lr/4, [opts.beta1, opts.beta2])
+
+    # Generate fixed noise for sampling from the generator
+    fixed_noise = sample_noise(opts.batch_size, opts.noise_size)  # B N 1 1
+
+    iteration = 1
+
+    total_train_iters = opts.num_epochs * len(train_dataloader)
+    lossFn = torch.nn.BCELoss()
+
+    lossG = []
+    lossD_real = []
+    lossD_fake = []
+
+    for _ in range(opts.num_epochs):
+
+        for batch in train_dataloader:
+
+            real_images = batch
+            real_images = utils.to_var(real_images)
+            real_labels = torch.ones(real_images.size(0))
+            real_labels = utils.to_var(real_labels)
+            # TRAIN THE DISCRIMINATOR
+            # 1. Compute the discriminator loss on real images
+            D_real_loss = lossFn(D(real_images), real_labels)
+
+            # 2. Sample noise
+            noise = sample_noise(real_images.size(0), opts.noise_size)
+            noise = utils.to_var(noise)
+
+            # 3. Generate fake images from the noise
+            fake_images = G(noise)
+            fake_labels = torch.zeros(fake_images.size(0))
+            fake_labels = utils.to_var(fake_labels)
+
+            # 4. Compute the discriminator loss on the fake images
+            D_fake_loss = lossFn(D(fake_images), fake_labels)
+            D_total_loss = D_real_loss + D_fake_loss
+
+            # update the discriminator D
+            d_optimizer.zero_grad()
+            D_total_loss.backward()
+            d_optimizer.step()
+            for i in range(2):
+                # TRAIN THE GENERATOR
+                # 1. Sample noise
+                noise = sample_noise(opts.batch_size, opts.noise_size)
+                noise = utils.to_var(noise)
+
+                # 2. Generate fake images from the noise
+                fake_images = G(noise)
+                fake_img_real_label = D(fake_images)
+                fake_img_fake_label = torch.ones(opts.batch_size)
+                fake_img_fake_label = utils.to_var(fake_img_fake_label)
+
+                # 3. Compute the generator loss
+                G_loss = lossFn(fake_img_real_label, fake_img_fake_label)
+
+                # update the generator G
+                g_optimizer.zero_grad()
+                G_loss.backward()
+                g_optimizer.step()
+
+
+
+            # Print the log info
+            if iteration % opts.log_step == 0:
+                print(
+                    'Iteration [{:4d}/{:4d}] | D_real_loss: {:6.4f} | '
+                    'D_fake_loss: {:6.4f} | G_loss: {:6.4f}'.format(
+                        iteration, total_train_iters, D_real_loss.item(),
+                        D_fake_loss.item(), G_loss.item()
+                    )
+                )
+                logger.add_scalar('D/fake', D_fake_loss, iteration)
+                logger.add_scalar('D/real', D_real_loss, iteration)
+                logger.add_scalar('D/total', D_total_loss, iteration)
+                logger.add_scalar('G/total', G_loss, iteration)
+
+            # Save the generated samples
+            if iteration % opts.sample_every == 0:
+                save_samples(G, fixed_noise, iteration, opts)
+                save_images(real_images, iteration, opts, 'real')
+
+            # Save the model parameters
+            if iteration % opts.checkpoint_every == 0:
+                checkpoint(iteration, G, D, opts)
+
+            iteration += 1
+
+        lossG.append(G_loss.item())
+        lossD_real.append(D_real_loss.item())
+        lossD_fake.append(D_fake_loss.item())
+
+    return lossG, lossD_real, lossD_fake
+
+
 def main(opts):
     """Loads the data and starts the training loop."""
 
@@ -360,15 +584,56 @@ def main(opts):
     utils.create_dir(opts.sample_dir)
 
     lossG, lossD_real, lossD_fake = training_loop(dataloader, opts)
+    lossD_tot = np.array(lossD_real) + np.array(lossD_fake)
 
     x = np.arange(0, opts.num_epochs)
     plt.plot(x, lossG, label='Generator')
     plt.plot(x, lossD_real, label='Discriminator Real')
     plt.plot(x, lossD_fake, label='Discriminator Fake')
+    plt.plot(x, lossD_tot, label='Discriminator Total')
     plt.xlabel('Iterations')
     plt.ylabel('Loss')
     plt.legend()
 
+    plt.show()
+
+    lossG, lossD_real, lossD_fake = training_loop_spectral(dataloader, opts)
+    lossD_tot = np.array(lossD_real) + np.array(lossD_fake)
+
+    x = np.arange(0, opts.num_epochs)
+    plt.plot(x, lossG, label='Generator')
+    plt.plot(x, lossD_real, label='Discriminator Real')
+    plt.plot(x, lossD_fake, label='Discriminator Fake')
+    plt.plot(x, lossD_tot, label='Discriminator Total')
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show()
+
+    lossG, lossC_real, lossC_fake = training_loop_WGAN(dataloader, opts)
+    lossC_tot = np.array(lossC_real) + np.array(lossC_fake)
+
+    x = np.arange(0, opts.num_epochs)
+    plt.plot(x, lossG, label='Generator')
+    plt.plot(x, lossC_real, label='Critic Real')
+    plt.plot(x, lossC_fake, label='Critic Fake')
+    plt.plot(x, lossC_tot, label='Critic Total')
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show()
+
+    lossG, lossD_real, lossD_fake = training_loop_LSGAN(dataloader, opts)
+    lossD_tot = np.array(lossD_real) + np.array(lossD_fake)
+
+    x = np.arange(0, opts.num_epochs)
+    plt.plot(x, lossG, label='Generator')
+    plt.plot(x, lossD_real, label='Discriminator Real')
+    plt.plot(x, lossD_fake, label='Discriminator Fake')
+    plt.plot(x, lossD_tot, label='Discriminator Total')
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
+    plt.legend()
     plt.show()
 
 
