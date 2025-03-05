@@ -519,7 +519,7 @@ def training_loop(train_dataloader, opts):
             d_optimizer.zero_grad()
             D_total_loss.backward()
             d_optimizer.step()
-            for i in range(2):
+            for i in range(3):
                 # TRAIN THE GENERATOR
                 # 1. Sample noise
                 noise = sample_noise(opts.batch_size, opts.noise_size)
@@ -657,7 +657,7 @@ def create_parser():
 
     # Data sources
     parser.add_argument('--data', type=str, default='cat/grumpifyBprocessed')
-    parser.add_argument('--data_preprocess', type=str, default='basic')
+    parser.add_argument('--data_preprocess', type=str, default='advanced')
     parser.add_argument('--ext', type=str, default='*.png')
 
     # Directories and checkpoint/sample iterations
