@@ -45,12 +45,12 @@ class Trainer:
         self.config = config
 
         # take over whatever gpus are on the system
-        self.device = 'cpu'
+        self.device = torch.device("cpu")
         if torch.cuda.is_available():
-            self.device = torch.cuda.current_device()
+            self.device = torch.device("cuda")
             self.model = torch.nn.DataParallel(self.model).to(self.device)
         elif torch.backends.mps.is_available() and not self.model.rope:
-            self.device = 'mps'
+            self.device = torch.device("mps")
             self.model = self.model.to(self.device)
 
     def save_checkpoint(self):
@@ -80,7 +80,7 @@ class Trainer:
             loader = DataLoader(data, 
                                 batch_size=config.batch_size, 
                                 shuffle=is_train,
-                                pin_memory=isinstance(self.device, int) or self.device.startswith('cuda'))
+                                pin_memory= self.device.type == 'cuda')
 
             losses = []
             pbar = tqdm(enumerate(loader), total=len(loader)) if is_train else enumerate(loader)

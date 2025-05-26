@@ -152,7 +152,7 @@ if __name__ == '__main__':
     argp = argparse.ArgumentParser()
     argp.add_argument('dataset_type', help="Type of dataset to sample from."
             "Options: namedata, charcorruption.",
-            choices=["namedata", "charcorruption"])
+            choices=["namedata", "charcorruption"], default="namedata")
     args = argp.parse_args()
 
     if args.dataset_type == 'namedata':

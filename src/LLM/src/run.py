@@ -4,10 +4,13 @@ import argparse
 import dataset
 import models
 import utils
+import trainer
 
 import torch
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+
+from dataset import NameDataset
 
 
 def main():
@@ -28,11 +31,11 @@ def main():
                     default='run')
     args = argp.parse_args()
 
-    device = 'cpu'
+    device = torch.device('cpu')
     if torch.cuda.is_available():
-        device = torch.cuda.current_device()
+        device = torch.device('cuda')
     elif torch.backends.mps.is_available() and args.variant == 'vanilla':
-        device = 'mps'
+        device = torch.device('mps')
 
     # TensorBoard training log
     writer = SummaryWriter(log_dir='expt/%s/%s_%s_pt_lr_%f_ft_lr_%f' % (
@@ -67,7 +70,15 @@ def main():
     if args.variant == 'vanilla':
         # TODO: [part c] Make some model here
         ### YOUR CODE HERE ###
-        pass
+        config = models.GPT1Config(
+            pretrain_dataset.vocab_size,
+            pretrain_dataset.block_size,
+            n_layer=12,
+            n_head=12,
+            n_embd=768)
+
+        model = models.GPT(config)
+        model.to(device)
         ### END YOUR CODE ###
     elif args.variant == 'rope':
         # TODO: [part g] Make some other model here
@@ -141,7 +152,15 @@ def main():
         #     number of epochs for each case.
 
         ### YOUR CODE HERE ###
-        pass
+        fine_tune_txt = open(args.finetune_corpus_path, encoding='utf-8').read()
+        name_dataset = NameDataset(pretrain_dataset, fine_tune_txt)
+
+        train_config = trainer.TrainerConfig()
+        trainer_model = trainer.Trainer(model, name_dataset, None, train_config)
+        trainer_model.train()
+        model_to_save = trainer_model.model.module if hasattr(trainer_model.model, 'module') else trainer_model.model
+        torch.save(model_to_save.state_dict(), args.writing_params_path)
+
         ### END YOUR CODE ###
     elif args.function == 'evaluate':
         assert args.outputs_path is not None

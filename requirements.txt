@@ -7,3 +7,5 @@ scipy>=1.7.1
 ultralytics>=8.0.107
 imageio>=2.14.0
 tensorboard>=2.6.0
+tqdm~=4.67.1
+pandas~=2.2.3
