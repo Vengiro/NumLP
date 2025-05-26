@@ -114,7 +114,13 @@ def main():
         # writer=writer
 
         ### YOUR CODE HERE ###
-        pass
+        train_config = trainer.TrainerConfig()
+        train_config.max_epochs = 650
+        trainer_model = trainer.Trainer(model, pretrain_dataset, None, train_config)
+        trainer_model.train()
+        model_to_save = trainer_model.model.module if hasattr(trainer_model.model, 'module') else trainer_model.model
+        torch.save(model_to_save.state_dict(), args.writing_params_path)
+
         ### END YOUR CODE ###
     elif args.function == 'finetune':
         assert args.writing_params_path is not None
@@ -152,10 +158,16 @@ def main():
         #     number of epochs for each case.
 
         ### YOUR CODE HERE ###
+        if args.reading_params_path is not None:
+            model.load_state_dict(torch.load(args.reading_params_path))
+            print(f'Loaded pretrained model from {args.reading_params_path}')
+
         fine_tune_txt = open(args.finetune_corpus_path, encoding='utf-8').read()
         name_dataset = NameDataset(pretrain_dataset, fine_tune_txt)
 
         train_config = trainer.TrainerConfig()
+        if args.reading_params_path is None:
+            train_config.max_epochs = 75
         trainer_model = trainer.Trainer(model, name_dataset, None, train_config)
         trainer_model.train()
         model_to_save = trainer_model.model.module if hasattr(trainer_model.model, 'module') else trainer_model.model

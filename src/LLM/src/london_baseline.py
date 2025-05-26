@@ -11,7 +11,14 @@ def main():
 
     # Compute accuracy in the range [0.0, 100.0]
     ### YOUR CODE HERE ###
-    pass
+    filepath = "../birth_dev.tsv"
+    with open(filepath, encoding='utf-8') as fin:
+        lines = [x.strip().split('\t') for x in fin]
+    total = len(lines) # Number of examples
+    correct = sum(1 for line in lines if line[1].lower() == "london")
+    accuracy = (correct / total) * 100 if total > 0 else 0.0
+    print(f"Accuracy: {accuracy:.2f}%")
+    print(f"Total: {total}, Correct: {correct}")
     ### END YOUR CODE ###
 
     return accuracy
