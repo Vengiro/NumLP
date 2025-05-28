@@ -25,7 +25,7 @@ Around 80% (100-95 on the early ones to 50-75 on the last ones) of the code is w
   * Vanilla Gradient Descent
   * Momentum
   * ADAM
-* Efficient backpropagation using caching of intermediate values.
+* Efficient backpropagation using caching of intermediate values otherwise called the tape method.
 * Dataset support: XOR, Swiss roll, and more.
 * Visualization of decision boundaries.
 
@@ -68,7 +68,7 @@ python mainCNN.py
   * Sliding window + CNN classification
   * A Faster R-CNN–like pipeline with region proposals
 * Comparison with YOLO-style detectors.
-* Evaluation with **mean Average Precision (mAP)** computation.
+* Evaluation with **mean Average Precision (mAP)** computation. (Implemented by hand what a pain it was)
 
 ---
 
@@ -82,7 +82,7 @@ python mainCNN.py
 
   * Generator & Discriminator from scratch (NumPy then PyTorch).
   * Training loop with alternating updates.
-* Advanced GAN variants:
+* Advanced GAN variants after reading suggested papers (All tried to stabilize the discriminator training):
 
   * Wasserstein GAN (with gradient penalty)
   * Least-Squares GAN
@@ -101,11 +101,10 @@ python mainCNN.py
 
   * Multi-head Self-Attention
   * Positional Encodings
-  * Layer Normalization
 * Planned:
 
-  * Training a small LLM on toy datasets.
-  * Exploring masked language modeling and text generation.
+  * Training a small LLM on toy datasets for **CHAR** prediction.
+  * Exploring rotary positional embeddings.
 
 ---
 

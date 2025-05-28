@@ -115,7 +115,7 @@ def main():
 
         ### YOUR CODE HERE ###
         train_config = trainer.TrainerConfig()
-        train_config.max_epochs = 650
+        train_config.max_epochs = 90
         trainer_model = trainer.Trainer(model, pretrain_dataset, None, train_config)
         trainer_model.train()
         model_to_save = trainer_model.model.module if hasattr(trainer_model.model, 'module') else trainer_model.model
