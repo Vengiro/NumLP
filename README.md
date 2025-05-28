@@ -112,8 +112,8 @@ python mainCNN.py
 ## Installation
 
 ```bash
-git clone <your-repo-url>
-cd <your-project-folder>
+git clone https://github.com/Vengiro/funDL.git
+cd funDL
 pip install -r requirements.txt
 ```
 
